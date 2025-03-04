@@ -29,12 +29,13 @@ export default function CrosswordPuzzle() {
   const [loading, setLoading] = useState(true)
   const [cellNumbers, setCellNumbers] = useState<(number | null)[][]>([])
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
-  const [currentDirection, setCurrentDirection] = useState<"across" | "down">("across")
+  const [currentDirection, setCurrentDirection] = useState<"across" | "down">("down") // Default to down
   const [currentWord, setCurrentWord] = useState<CrosswordWord | null>(null)
   const [highlightedCells, setHighlightedCells] = useState<[number, number][]>([])
 
   // Create a ref to store input references
   const inputRefs = useRef<Record<string, HTMLInputElement>>({})
+  const gridRef = useRef<HTMLDivElement>(null)
 
   // Load crossword data from JSON
   useEffect(() => {
@@ -60,9 +61,16 @@ export default function CrosswordPuzzle() {
 
         // Set initial selection to first word
         if (data.words.length > 0) {
-          const firstWord = data.words[0]
-          setSelectedCell([firstWord.startRow, firstWord.startCol])
-          setCurrentDirection(firstWord.direction)
+          // Find a down word to start with if possible
+          const firstDownWord = data.words.find((word) => word.direction === "down")
+          if (firstDownWord) {
+            setSelectedCell([firstDownWord.startRow, firstDownWord.startCol])
+            setCurrentDirection("down")
+          } else {
+            const firstWord = data.words[0]
+            setSelectedCell([firstWord.startRow, firstWord.startCol])
+            setCurrentDirection(firstWord.direction)
+          }
         }
       } catch (error) {
         console.error("Failed to load crossword data:", error)
@@ -124,6 +132,103 @@ export default function CrosswordPuzzle() {
     }
   }, [selectedCell])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedCell || !gridRef.current) return
+
+      const [row, col] = selectedCell
+      let newRow = row
+      let newCol = col
+
+      // Handle arrow key navigation
+      switch (e.key) {
+        case "ArrowUp":
+          newRow = Math.max(0, row - 1)
+          break
+        case "ArrowDown":
+          newRow = Math.min(grid.length - 1, row + 1)
+          break
+        case "ArrowLeft":
+          newCol = Math.max(0, col - 1)
+          break
+        case "ArrowRight":
+          newCol = Math.min(grid[0].length - 1, col + 1)
+          break
+        case "Tab": {
+          e.preventDefault(); // Prevent tab from moving focus out of grid
+
+          const nextDirection = currentDirection === "across" ? "down" : "across";
+          setCurrentDirection(nextDirection);
+
+          // Find the first word in the new direction
+          if (crosswordData?.words) {
+            const nextWord = crosswordData.words.find(word => word.direction === nextDirection);
+            if (nextWord) {
+              setSelectedCell([nextWord.startRow, nextWord.startCol]);
+            } else {
+              // If no word in the new direction, maybe keep the current selection or find the first word overall
+              if (crosswordData.words.length > 0) {
+                const firstWord = crosswordData.words[0];
+                setSelectedCell([firstWord.startRow, firstWord.startCol]);
+                setCurrentDirection(firstWord.direction);
+              } else {
+                setSelectedCell(null); // No words at all
+              }
+            }
+          }
+          return; // Important to return after handling tab to avoid default arrow key logic
+        }
+        default:
+          return // Exit for other keys
+      }
+
+      // Only move if the target cell is valid (not a black cell)
+      if (grid[newRow][newCol]) {
+        e.preventDefault() // Prevent default scrolling behavior
+        setSelectedCell([newRow, newCol])
+
+        // Update direction based on arrow key if needed
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          setCurrentDirection("down")
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          setCurrentDirection("across")
+        }
+      }
+    }
+
+    // Track focus changes to update the selected cell
+    const handleFocusChange = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement) {
+        // Find which cell this input belongs to
+        for (const key in inputRefs.current) {
+          if (inputRefs.current[key] === e.target) {
+            const [row, col] = key.split("-").map(Number)
+            setSelectedCell([row, col])
+
+            // Determine the appropriate direction based on available words
+            const { across, down } = getAvailableDirections(row, col)
+            if (down) {
+              setCurrentDirection("down")
+            } else if (across) {
+              setCurrentDirection("across")
+            }
+
+            break
+          }
+        }
+      }
+    }
+
+    // Add event listeners
+    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("focusin", handleFocusChange)
+
+    // Clean up
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("focusin", handleFocusChange)
+    }
+  }, [selectedCell, grid, currentDirection, crosswordData])
   // Initialize the grid with the crossword data
   const initializeGrids = (data: CrosswordData) => {
     const size = data.size
@@ -230,12 +335,13 @@ export default function CrosswordPuzzle() {
       // Check available directions and set appropriate direction
       const { across, down } = getAvailableDirections(row, col)
 
-      if (across && !down) {
-        setCurrentDirection("across")
-      } else if (!across && down) {
+      if (down) {
+        // Prioritize down direction if available
         setCurrentDirection("down")
+      } else if (across) {
+        setCurrentDirection("across")
       }
-      // If both directions are available, keep the current direction
+      // If neither direction is available, keep the current direction (shouldn't happen)
     }
   }
 
@@ -306,7 +412,11 @@ export default function CrosswordPuzzle() {
               </div>
 
               {/* Crossword Grid */}
-              <div className="grid grid-cols-5 gap-0 border border-gray-300 w-fit mx-auto">
+              <div
+                ref={gridRef}
+                className="grid grid-cols-5 gap-0 border border-gray-300 w-fit mx-auto"
+                tabIndex={-1} // Make the grid focusable for keyboard events
+              >
                 {grid.map((row, rowIndex) =>
                   row.map((_, colIndex) => {
                     const isHighlighted = isCellHighlighted(rowIndex, colIndex)
@@ -336,6 +446,7 @@ export default function CrosswordPuzzle() {
                             onChange={(e) => handleCellChange(rowIndex, colIndex, e.target.value)}
                             className="w-full h-full text-center text-lg font-bold p-0 border-none focus:ring-0"
                             maxLength={1}
+                            onFocus={() => setSelectedCell([rowIndex, colIndex])}
                           />
                         )}
                       </div>
@@ -357,7 +468,7 @@ export default function CrosswordPuzzle() {
 
             {/* Clues */}
             <div>
-              <Tabs defaultValue="across">
+              <Tabs defaultValue="down">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="across">Across</TabsTrigger>
                   <TabsTrigger value="down">Down</TabsTrigger>
