@@ -29,7 +29,7 @@ export interface ClueInfo {
 
 export interface CrosswordGrid {
   grid: GridBox[][];
-  across: Record<number, ClueInfo>;
-  down: Record<number, ClueInfo>;
+  acrossStarts: Set<number>;
+  downStarts: Set<number>;
   gridSize: number;
 }

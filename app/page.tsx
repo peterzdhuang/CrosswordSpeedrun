@@ -67,8 +67,10 @@ export default function CrosswordPuzzle() {
     if (crosswordGrid && !userBoard?.[row][col]) {
       const selectedGridBox = crosswordGrid[row][col];
       setSelectedCell(selectedGridBox);
-      
+
       if (selectedGridBox.across && selectedGridBox.down) {
+        console.log(acrossClues[selectedGridBox.across], downClues[selectedGridBox.down], selectWord)
+
         // If both across and down exist, toggle between them
         if (selectWord === downClues[selectedGridBox.down].answer) {
           setSelectWord(acrossClues[selectedGridBox.across].answer);
@@ -82,8 +84,6 @@ export default function CrosswordPuzzle() {
       } else {
         setSelectWord(null);
       }
-      
-      console.log(`Cell clicked: ${row}, ${col}`, selectedGridBox);
     }
   };
   

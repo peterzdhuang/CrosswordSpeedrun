@@ -3,9 +3,7 @@ import { ClueInfo, CrosswordData, CrosswordGrid, GridBox } from '../types/crossw
 export function loadJson(data: CrosswordData): CrosswordGrid {
   const gridSize = data.size.cols;
   const grid: GridBox[][] = [];
-  const across: Record<number, ClueInfo> = {};
-  const down: Record<number, ClueInfo> = {};
-
+  console.log(data)
   // Create 2D grid
   for (let y = 0; y < gridSize; y++) {
     grid[y] = [];
@@ -22,61 +20,31 @@ export function loadJson(data: CrosswordData): CrosswordGrid {
     }
   }
 
-  // Find across words
+  const gridNums : number[] = data.gridnums;
+
+  // Initialize sets to store clue starts
+  const acrossStarts = new Set<number>();
+  const downStarts = new Set<number>();
+
+  // Iterate through the grid to find clue starts
   for (let y = 0; y < gridSize; y++) {
     for (let x = 0; x < gridSize; x++) {
-      // Check for across word start
-      if ((x === 0 || grid[y][x-1].isBlocked) && !grid[y][x].isBlocked) {
-        const number = grid[y][x].number;
-        if (number === 0) continue;
+      // Skip black squares
+      if (grid[y][x].isBlocked) {
+        continue;
+      }
 
-        // Measure word length and find end
-        let endX = x;
-        while (endX < gridSize && !grid[y][endX].isBlocked) {
-          // Mark across number for each box in the word
-          grid[y][endX].across = number;
-          endX++;
-        }
+      // Check for across clue start
+      if (gridNums[y * gridSize + x] > 0 && (x === 0 || grid[y][x-1].isBlocked)) {
+        acrossStarts.add(gridNums[y * gridSize + x]);
+      }
 
-        // Find corresponding clue index
-        const clueIndex = Object.keys(across).length;
-        across[number] = {
-          clue: data.clues.across[clueIndex],
-          start: [x, y],
-          end: [endX - 1, y],
-          answer: data.answers.across[clueIndex]
-        };
+      // Check for down clue start
+      if (gridNums[y * gridSize + x] > 0 && (y === 0 || grid[y-1][x].isBlocked)) {
+        downStarts.add(gridNums[y * gridSize + x]);
       }
     }
   }
 
-  // Find down words
-  for (let x = 0; x < gridSize; x++) {
-    for (let y = 0; y < gridSize; y++) {
-      // Check for down word start
-      if ((y === 0 || grid[y-1][x].isBlocked) && !grid[y][x].isBlocked) {
-        const number = grid[y][x].number;
-        if (number === 0) continue;
-
-        // Measure word length and find end
-        let endY = y;
-        while (endY < gridSize && !grid[endY][x].isBlocked) {
-          // Mark down number for each box in the word
-          grid[endY][x].down = number;
-          endY++;
-        }
-
-        // Find corresponding clue index
-        const clueIndex = Object.keys(down).length;
-        down[number] = {
-          clue: data.clues.down[clueIndex],
-          start: [x, y],
-          end: [x, endY - 1],
-          answer: data.answers.down[clueIndex]
-        };
-      }
-    }
-  }
-
-  return { grid, across, down, gridSize };
+  return { grid, acrossStarts, downStarts, gridSize };
 }
